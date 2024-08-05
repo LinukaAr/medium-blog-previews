@@ -1,0 +1,50 @@
+name: Update README with Medium Blog Posts
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Runs every hour
+  workflow_dispatch:
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Fetch Medium RSS Feed
+      id: medium
+      uses: actions/github-script@0.9.0
+      with:
+        script: |
+          const axios = require('axios');
+          const parser = require('xml2js').parseString;
+          const username = 'linukaarambawela';
+          const url = `https://medium.com/feed/@${linukaarambawela}`;
+          const response = await axios.get(url);
+          let feed;
+          parser(response.data, (err, result) => {
+            feed = result;
+          });
+          return feed;
+
+    - name: Update README
+      id: update-readme
+      run: |
+        POSTS=${{ steps.medium.outputs.feed.rss.channel[0].item.slice(0, 5) }}
+        README=$(cat README.md)
+        NEW_README=$(echo "$README" | sed '/# Blog Posts/q')
+        NEW_README+=$'\n\n'
+        for post in "${POSTS[@]}"
+        do
+          TITLE=$(echo "$post.title[0]")
+          LINK=$(echo "$post.link[0]")
+          NEW_README+="$TITLE\n$LINK\n\n"
+        done
+        echo "$NEW_README" > README.md
+
+    - name: Commit Changes
+      uses: stefanzweifel/git-auto-commit-action@v4
+      with:
+        commit_message: Update README with latest Medium posts
+        branch: main
