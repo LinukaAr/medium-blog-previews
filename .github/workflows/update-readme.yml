@@ -13,35 +13,18 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Fetch Medium RSS Feed
-      id: medium
-      uses: actions/github-script@0.9.0
-      with:
-        script: |
-          const axios = require('axios');
-          const parser = require('xml2js').parseString;
-          const username = 'linukaarambawela';
-          const url = `https://medium.com/feed/@${linukaarambawela}`;
-          const response = await axios.get(url);
-          let feed;
-          parser(response.data, (err, result) => {
-            feed = result;
-          });
-          return feed;
+      run: curl -s "https://medium.com/feed/@linukaarambawela" -o medium_feed.xml
+
+    - name: Extract Blog Posts
+      id: extract_posts
+      run: |
+        apt-get update && apt-get install -y xmlstarlet
+        xmlstarlet sel -t -m '//item[position()<=5]' -v 'concat("<li><a href=\"", link, "\">", title, "</a></li>")' -n medium_feed.xml > blog_posts.html
 
     - name: Update README
-      id: update-readme
       run: |
-        POSTS=${{ steps.medium.outputs.feed.rss.channel[0].item.slice(0, 5) }}
-        README=$(cat README.md)
-        NEW_README=$(echo "$README" | sed '/# Blog Posts/q')
-        NEW_README+=$'\n\n'
-        for post in "${POSTS[@]}"
-        do
-          TITLE=$(echo "$post.title[0]")
-          LINK=$(echo "$post.link[0]")
-          NEW_README+="$TITLE\n$LINK\n\n"
-        done
-        echo "$NEW_README" > README.md
+        sed -i '/<!-- BLOG-POST-LIST:START -->/,/<!-- BLOG-POST-LIST:END -->/{//!d}' README.md
+        sed -i '/<!-- BLOG-POST-LIST:START -->/r blog_posts.html' README.md
 
     - name: Commit Changes
       uses: stefanzweifel/git-auto-commit-action@v4
